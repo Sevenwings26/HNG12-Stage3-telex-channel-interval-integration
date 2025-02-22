@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import time
 import logging
 
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -42,3 +41,4 @@ def scrape_eventbrite_events(eventbrite_endpoint: str):
 
     return events
 
+# scrape_eventbrite_events("nigeria--lagos/tech-events-in-lagos-2025")

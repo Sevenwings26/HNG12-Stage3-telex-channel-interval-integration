@@ -1,61 +1,139 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
+from pydantic import BaseModel
+from typing import List
+import httpx
+import asyncio
 from scraper import scrape_eventbrite_events, logging
-# from . import integration.json
-import requests
 
 app = FastAPI()
 
+# Pydantic model for the payload sent to /tick
+class Setting(BaseModel):
+    label: str
+    type: str
+    required: bool
+    default: str
+
+class TickPayload(BaseModel):
+    channel_id: str
+    return_url: str
+    settings: List[Setting]
+
+# Endpoint to return the integration schema
 @app.get("/integration.json")
 def get_integration_json(request: Request):
     base_url = str(request.base_url).rstrip("/")
     return {
         "data": {
-            "descriptions": {
-                "app_name": "Tech Event Announcer",
-                "app_description": "Fetches tech events from Eventbrite and posts updates to a Telex channel.",
-                "app_url": base_url,
-                "app_logo": "https://iili.io/39p8VoJ.jpg",
-                "background_color": "#HEXCODE"
+            "date": {
+                "created_at": "2025-02-22",
+                "updated_at": "2025-02-22"
             },
-            "integration_type": "messaging",
+            "descriptions": {
+                "app_description": "Fetches tech events from Eventbrite and posts updates to a Telex channel.",
+                "app_logo": "https://iili.io/39p8VoJ.jpg",
+                "app_name": "Tech Event Announcer",
+                "app_url": base_url,
+                "background_color": "#4A90E2"
+            },
+            "integration_category": "Email & Messaging",
+            "integration_type": "interval",
             "is_active": True,
+            "output": [
+                {
+                    "label": "Telex Channel",
+                    "value": True
+                }
+            ],
+            "key_features": [
+                "Scrapes Eventbrite for tech events.",
+                "Posts formatted messages with event details."
+            ],
+            "permissions": {
+                "monitoring_user": {
+                    "always_online": True,
+                    "display_name": "Tech Event Monitor"
+                }
+            },
             "settings": [
-                {"label": "interval", "type": "text", "required": True, "default": "0 * * * *"},
-                {"label": "Eventbrite Location", "type": "text", "required": True, "default": "online--tech"}
+                {
+                    "label": "interval",
+                    "type": "text",
+                    "required": True,
+                    "default": "0 * * * *" 
+                },
+                {
+                    "label": "Eventbrite Location",
+                    "type": "text",
+                    "required": True,
+                    "default": "nigeria--lagos/tech-events-in-lagos-2025"
+                }
             ],
             "tick_url": f"{base_url}/tick"
         }
     }
 
-@app.get("/tick")
-def tick():
-    logging.info("Telex triggered /tick. Fetching events...")
-    events = scrape_eventbrite_events("nigeria--lagos/tech-events-in-lagos-2025")
+# Background task to scrape events and post to Telex
+async def post_events_to_telex(payload: TickPayload):
+    # Extract Eventbrite location from settings
+    eventbrite_location = next(
+        (s.default for s in payload.settings if s.label == "Eventbrite Location"),
+        "nigeria--lagos/tech-events-in-lagos-2025"
+    )
 
-    # Simulate posting to Telex channel
+    # Scrape events
+    events = scrape_eventbrite_events(eventbrite_location)
+
+    # Format and post each event to Telex
     for event in events:
-        post_to_telex(event)
+        message = (
+            f"**{event['title']}**\n"
+            f"Date: {event['date']}\n"
+            f"Location: {event['location']}\n"
+            f"Link: {event['link']}"
+        )
 
-    return {"status": "success", "message": f"Scraped {len(events)} events"}
+        data = {
+            "message": message,
+            "username": "Iyanu",
+            "event_name": "Tech Event Update",
+            "status": "info"
+        }
+
+        # Post to Telex using the return_url
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(payload.return_url, json=data)
+                if response.status_code == 200:
+                    logging.info(f"Posted event to Telex: {event['title']}")
+                else:
+                    logging.error(f"Failed to post event: {response.text}")
+            except Exception as e:
+                logging.error(f"Error posting to Telex: {e}")
 
 
-def post_to_telex(event):
-    """
-    Simulates sending an event to a Telex channel.
-    """
-    telex_webhook = "https://ping.telex.im/v1/webhooks/01952892-fa2d-7d0f-9522-1135c1afd2b6"
-    payload = {
-        "title": event["title"],
-        "date": event["date"],
-        "location": event["location"],
-        "link": event["link"]
-    }
+@app.post("/tick", status_code=202)
+def tick(payload: TickPayload, background_tasks: BackgroundTasks):
+    background_tasks.add_task(post_events_to_telex, payload)
+    return {"status": "accepted"}
 
-    try:
-        response = requests.post(telex_webhook, json=payload)
-        if response.status_code == 200:
-            logging.info(f"Successfully posted event: {event['title']}")
-        else:
-            logging.error(f"Failed to post event: {response.text}")
-    except Exception as e:
-        logging.error(f"Error posting to Telex: {e}")
+
+
+# {
+#     "channel_id": "01952892-fa2d-7d0f-9522-1135c1afd2b6",
+#     "return_url": "https://ping.telex.im/v1/webhooks/01952892-fa2d-7d0f-9522-1135c1afd2b6",
+#     "settings": [
+#         {
+#             "label": "interval",
+#             "type": "text",
+#             "required": true,
+#             "default": "0 * * * *"
+#         },
+#         {
+#             "label": "Eventbrite Location",
+#             "type": "text",
+#             "required": true,
+#             "default": "nigeria--lagos/tech-events-in-lagos-2025"
+#         }
+#     ]
+# }
