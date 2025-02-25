@@ -61,7 +61,7 @@ def get_integration_json(request: Request):
                     "label": "interval",
                     "type": "text",
                     "required": True,
-                    "default": "0 * * * *" 
+                    "default": "* * * * *" 
                 },
                 {
                     "label": "Eventbrite Location",
