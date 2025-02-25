@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, BackgroundTasks
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 from typing import List
 import httpx
 import asyncio
@@ -69,9 +70,11 @@ def get_integration_json(request: Request):
                     "default": "nigeria--lagos/tech-events-in-lagos-2025"
                 }
             ],
+            "target_url": "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268",
             "tick_url": f"{base_url}/tick"
         }
     }
+
 
 # Background task to scrape events and post to Telex
 async def post_events_to_telex(payload: TickPayload):
@@ -100,16 +103,34 @@ async def post_events_to_telex(payload: TickPayload):
             "status": "info"
         }
 
-        # Post to Telex using the return_url
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as http_client:
             try:
-                response = await client.post(payload.return_url, json=data)
-                if response.status_code == 200:
-                    logging.info(f"Posted event to Telex: {event['title']}")
-                else:
-                    logging.error(f"Failed to post event: {response.text}")
-            except Exception as e:
-                logging.error(f"Error posting to Telex: {e}")
+                response = await http_client.post(
+                    "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", #change to channel_url
+                    json=payload.model_dump(),
+                    headers={
+                        "Accept" : "application/json",
+                        "Content-Type": "application/json"}
+                )
+                return response.json()
+            except:
+                return JSONResponse({"error": "Error communicating with telex"})
+
+
+        # # Post to Telex using the return_url
+        # async with httpx.AsyncClient() as client:
+        #     try:
+        #         response = await client.post("https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", json=payload,
+        #         headers={
+        #             "Accept": "application/json",
+        #             "Content-Type": "application/json"
+        #         })
+        #         if response.status_code == 200:
+        #             logging.info(f"Posted event to Telex: {event['title']}")
+        #         else:
+        #             logging.error(f"Failed to post event: {response.text}")
+        #     except Exception as e:
+        #         logging.error(f"Error posting to Telex: {e}")
 
 
 @app.post("/tick", status_code=202)
@@ -118,22 +139,3 @@ def tick(payload: TickPayload, background_tasks: BackgroundTasks):
     return {"status": "accepted"}
 
 
-
-# {
-#     "channel_id": "01952892-fa2d-7d0f-9522-1135c1afd2b6",
-#     "return_url": "https://ping.telex.im/v1/webhooks/01952892-fa2d-7d0f-9522-1135c1afd2b6",
-#     "settings": [
-#         {
-#             "label": "interval",
-#             "type": "text",
-#             "required": true,
-#             "default": "0 * * * *"
-#         },
-#         {
-#             "label": "Eventbrite Location",
-#             "type": "text",
-#             "required": true,
-#             "default": "nigeria--lagos/tech-events-in-lagos-2025"
-#         }
-#     ]
-# }
