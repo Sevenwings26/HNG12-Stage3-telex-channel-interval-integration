@@ -75,6 +75,28 @@ def get_integration_json(request: Request):
         }
     }
 
+@app.get('/events')
+async def get_events():
+    # Fetch events from Eventbrite
+    eventbrite_location = "nigeria--lagos/tech-events-in-lagos-2025"
+    events = scrape_eventbrite_events(eventbrite_location)
+    # Format and post each event to Telex
+    for event in events:
+        message = (
+            f"**{event['title']}**\n"
+            f"Date: {event['date']}\n"
+            f"Location: {event['location']}\n"
+            f"Link: {event['link']}"
+        )
+
+        data = {
+            "message": message,
+            "username": "Iyanu",
+            "event_name": "Tech Event Update",
+            "status": "info"
+        }
+    return data
+
 
 # Background task to scrape events and post to Telex
 async def post_events_to_telex(payload: TickPayload):
@@ -103,23 +125,46 @@ async def post_events_to_telex(payload: TickPayload):
             "status": "info"
         }
 
+        # Log the data being sent
+        logging.info(f"Posting event to Telex: {data}")
+
         # Post to Telex using the return_url
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post("https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", json=data,
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json"
-                })
+                response = await client.post(
+                    "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268",
+                    json=data,
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    }
+                )
                 if response.status_code == 200:
                     logging.info(f"Posted event to Telex: {event['title']}")
                 else:
                     logging.error(f"Failed to post event: {response.text}")
+                    # Retry logic (optional)
+                    retry_count = 3
+                    for attempt in range(retry_count):
+                        logging.info(f"Retrying ({attempt + 1}/{retry_count})...")
+                        response = await client.post(
+                            "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268",
+                            json=data,
+                            headers={
+                                "Accept": "application/json",
+                                "Content-Type": "application/json"
+                            }
+                        )
+                        if response.status_code == 200:
+                            logging.info(f"Posted event to Telex after retry: {event['title']}")
+                            break
+                    else:
+                        logging.error(f"Failed to post event after {retry_count} retries: {response.text}")
             except Exception as e:
                 logging.error(f"Error posting to Telex: {e}")
 
 
-@app.post("/tick", status_code=202)
+@app.get("/tick", status_code=202)
 def tick(payload: TickPayload, background_tasks: BackgroundTasks):
     background_tasks.add_task(post_events_to_telex, payload)
     return {"status": "accepted"}
