@@ -164,7 +164,7 @@ async def post_events_to_telex(payload: TickPayload):
                 logging.error(f"Error posting to Telex: {e}")
 
 
-@app.get("/tick", status_code=202)
+@app.post("/tick", status_code=202)
 def tick(payload: TickPayload, background_tasks: BackgroundTasks):
     background_tasks.add_task(post_events_to_telex, payload)
     return {"status": "accepted"}
