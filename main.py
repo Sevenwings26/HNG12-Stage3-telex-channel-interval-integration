@@ -103,34 +103,34 @@ async def post_events_to_telex(payload: TickPayload):
             "status": "info"
         }
 
-        async with httpx.AsyncClient() as http_client:
-            try:
-                response = await http_client.post(
-                    "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", #change to channel_url
-                    json=payload.model_dump(),
-                    headers={
-                        "Accept" : "application/json",
-                        "Content-Type": "application/json"}
-                )
-                return response.json()
-            except:
-                return JSONResponse({"error": "Error communicating with telex"})
-
-
-        # # Post to Telex using the return_url
-        # async with httpx.AsyncClient() as client:
+        # async with httpx.AsyncClient() as http_client:
         #     try:
-        #         response = await client.post("https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", json=payload,
-        #         headers={
-        #             "Accept": "application/json",
-        #             "Content-Type": "application/json"
-        #         })
-        #         if response.status_code == 200:
-        #             logging.info(f"Posted event to Telex: {event['title']}")
-        #         else:
-        #             logging.error(f"Failed to post event: {response.text}")
-        #     except Exception as e:
-        #         logging.error(f"Error posting to Telex: {e}")
+        #         response = await http_client.post(
+        #             "https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268",
+        #             json=payload.model_dump(),
+        #             headers={
+        #                 "Accept" : "application/json",
+        #                 "Content-Type": "application/json"}
+        #         )
+        #         return response.json()
+        #     except:
+        #         return JSONResponse({"error": "Error communicating with telex"})
+
+
+        # Post to Telex using the return_url
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post("https://ping.telex.im/v1/webhooks/01953bed-1c28-7197-9774-4babc14d6268", json=payload,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                })
+                if response.status_code == 200:
+                    logging.info(f"Posted event to Telex: {event['title']}")
+                else:
+                    logging.error(f"Failed to post event: {response.text}")
+            except Exception as e:
+                logging.error(f"Error posting to Telex: {e}")
 
 
 @app.post("/tick", status_code=202)
